@@ -1,15 +1,33 @@
+# --------------------------------------------------
+#    Imports
+# --------------------------------------------------
+import configparser
 import os
 import random
 import time
 import pandas as pd
 
+
+# --------------------------------------------------
+#    CONFIG FILE
+# --------------------------------------------------
+CONFIG_FILE = '/etc/datamodule_example.conf'
+CONFIG = None
+if os.path.isfile(CONFIG_FILE):
+    CONFIG = configparser.ConfigParser()
+    CONFIG.read(CONFIG_FILE)
+
+
+# --------------------------------------------------
+#    Queries
+# --------------------------------------------------
 def random_data(rows, cols):
     """
 return a dataframe with random data
 
 Params:
     rows - number of rows of random data
-    cols - number of columns of random data 
+    cols - number of columns of random data
 
 CSV Output
 Example Query: &output=csv&rows=5&cols=1
@@ -25,6 +43,17 @@ Example Output
     3,317,2689007,1710093848.8563957
     4,416,2689007,1710093848.8563957
     """
+
+    # read a secret example
+    # example of secrets file at /etc/datamodule_example.conf
+    #    ['Secrets']
+    #        Test=abcd
+    if CONFIG is not None:
+        secret = CONFIG['Secrets']['Test']
+        print(f'secret is {secret}')
+    else:
+        print(f'missing config file at {CONFIG_FILE}')
+
     cols = int(cols)
     rows = int(rows)
     data = []
@@ -45,4 +74,3 @@ Example Output
 
     # success!
     return df
-    
