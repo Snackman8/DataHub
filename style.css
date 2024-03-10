@@ -1,0 +1,26 @@
+h1 {
+    color: blue;
+}
+
+h4 {
+    margin-bottom: 4px;
+}
+
+.divmodule {
+    padding-left: 40px;
+}
+
+.doc {
+    margin-top: 8px;
+    padding-left: 40px;
+    margin-bottom: 8px;
+}
+
+.path {
+    padding-left: 40px;
+    color: blue;
+}
+
+.a {
+    padding-left: 40px;
+}
