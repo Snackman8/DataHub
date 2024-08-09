@@ -141,12 +141,13 @@ def _execute_fast_cache_worker(path, parsed_qs):
         return ''
 
 
-def execute_query(path, parsed_qs):
+def execute_query(path, parsed_qs, nospawn=False):
     """ execute a data query and return the results
 
         Args:
             path - path to module to execute
             parsed_qs - dictionary of query parameters
+            nospawn - if set to True, do not spawn a separate process
 
         Return:
             data
@@ -158,14 +159,22 @@ def execute_query(path, parsed_qs):
         # special for fast_cache
         if output == 'fast_cache':
             # try to return the path to a cache file directly
-            future = executor.submit(_execute_fast_cache_worker, path, parsed_qs)
-            fast_cache_path = future.result()
+            if not nospawn:
+                future = executor.submit(_execute_fast_cache_worker, path, parsed_qs)
+                fast_cache_path = future.result()
+            else:
+                fast_cache_path = _execute_fast_cache_worker(path, parsed_qs)
+
             content_type = 'application/fast_cache'
             return fast_cache_path, content_type, 200
 
         # handle all other formats
-        future = executor.submit(_execute_query_worker, path, parsed_qs)
-        result = future.result()
+        if not nospawn:
+            future = executor.submit(_execute_query_worker, path, parsed_qs)
+            result = future.result()
+        else:
+            result = _execute_query_worker(path, parsed_qs)
+
         f = io.BytesIO(result)
 
         content_type = 'text/plain'

@@ -48,6 +48,7 @@ def handle_404(path, uri, host, extra_settings, *args):
     authuser = parsed_qs.pop('authuser', [''])[0]
     authtoken = parsed_qs.pop('authtoken', [''])[0]
     callerid = parsed_qs.pop('callerid', [''])[0]
+    nospawn = parsed_qs.pop('nospawn', [''])[0]
 
     try:
         # check if the qid parameter was passed in
@@ -59,7 +60,7 @@ def handle_404(path, uri, host, extra_settings, *args):
         else:
             # execute the query
             parsed_qs = {k:v[0] for k, v in parsed_qs.items()}
-            html, content_type, return_code = business_logic.execute_query(path, parsed_qs)
+            html, content_type, return_code = business_logic.execute_query(path, parsed_qs, nospawn not in ['', '0'])
             return (html, content_type, return_code)
     except:
         html = f'<pre>{traceback.format_exc()}</pre>'
@@ -83,6 +84,7 @@ def main():
 
     # run the application
     logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
+
     run_pylinkjs_app(default_html='this_should_never_exist', on_404=handle_404, port=args['port'],
                      extra_settings={'modulepath': args['modulepath']})
 
