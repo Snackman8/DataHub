@@ -60,8 +60,13 @@ def handle_404(path, uri, host, extra_settings, *args):
         else:
             # execute the query
             parsed_qs = {k:v[0] for k, v in parsed_qs.items()}
-            html, content_type, return_code = business_logic.execute_query(path, parsed_qs, nospawn not in ['', '0'])
-            return (html, content_type, return_code)
+            retval = business_logic.execute_query(path, parsed_qs, nospawn not in ['', '0'])
+            if len(retval) == 4:
+                html, content_type, return_code, headers = retval
+            else:
+                html, content_type, return_code = retval
+                headers = {}
+            return (html, content_type, return_code, headers)
     except:
         html = f'<pre>{traceback.format_exc()}</pre>'
         return (html, 'text/html', 500)

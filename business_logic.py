@@ -113,12 +113,16 @@ def _execute_query_worker(path, parsed_qs):
     qid = parsed_qs.pop('qid')
     result = getattr(m, qid)(**parsed_qs)
 
-    f = io.BytesIO()
-    result.to_pickle(f)
-    f.seek(0)
-    result = f.read()
-    f.close()
-
+    # check if this is already a pickle
+    if not isinstance(result, io.BytesIO):
+        f = io.BytesIO()
+        result.to_pickle(f, compression='gzip')
+        f.seek(0)
+        result = f.read()
+        f.close()
+    else:
+        result.seek(0)
+        result = result.read()
     return result
 
 
@@ -177,21 +181,23 @@ def execute_query(path, parsed_qs, nospawn=False):
 
         f = io.BytesIO(result)
 
+        headers = {}
         content_type = 'text/plain'
         if output == 'csv':
-            result = pd.read_pickle(f).to_csv()
+            result = pd.read_pickle(f, compression='gzip').to_csv()
         elif output == 'json':
             content_type = 'application/json'
-            result = pd.read_pickle(f).to_json()
+            result = pd.read_pickle(f, compression='gzip').to_json()
         elif output == 'pickle':
-            content_type = 'application/pickle'
+            content_type = 'application/python-pickle'
+            headers['Content-Encoding'] = 'gzip'
         elif output == 'html':
             # convert the dataframe to pretty html
-            result = pd.read_pickle(f)
+            result = pd.read_pickle(f, compression='gzip')
             result = pretty_html_table.build_table(result.reset_index(), 'blue_light')
             content_type = 'text/html'
         elif output == 'fast_cache':
             pass
 
         f.close()
-        return result, content_type, 200
+        return result, content_type, 200, headers
