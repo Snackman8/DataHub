@@ -4,10 +4,11 @@
 # --------------------------------------------------
 import argparse
 import logging
+import os
 import sys
 import traceback
 from urllib.parse import urlparse, parse_qs
-import business_logic
+import DataHub.business_logic as business_logic
 from pylinkjs.PyLinkJS import run_pylinkjs_app
 
 
@@ -77,9 +78,10 @@ def handle_404(path, uri, host, extra_settings, *args):
 # --------------------------------------------------
 def main():
     # parse the arguments
+    default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')     
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, help="port to run on", default=DEFAULT_PORT, required=False)
-    parser.add_argument("--modulepath", help="location of additional modules", default='.', required=False)
+    parser.add_argument("--modulepath", help="location of additional modules", default=default_provider_path, required=False)
     args = vars(parser.parse_args())
     print(args)
 

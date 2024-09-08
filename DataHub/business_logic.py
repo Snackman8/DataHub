@@ -10,7 +10,6 @@ import io
 import os
 import pretty_html_table
 import pandas as pd
-from CCDILib.utils.dateutils import normalize_start_date_end_date
 
 
 # --------------------------------------------------
@@ -128,21 +127,7 @@ def _execute_query_worker(path, parsed_qs):
 
 def _execute_fast_cache_worker(path, parsed_qs):
     """ worker to execute a data query if asking for fast_cache"""
-    try:
-        # load the functions in the module
-        m = importlib.import_module(path.replace('/', '.'))
-        cache_dir = getattr(m, 'CACHE_ROOT_DIR')
-
-        # get the normalized start_date and end_date
-        start_date, end_date, _, _ = normalize_start_date_end_date(parsed_qs['start_date'], parsed_qs['end_date'])
-        subpath = os.path.split(path)[1]
-        func_name = parsed_qs['qid']
-        cache_filename = func_name + '?start_date=' + start_date.strftime('%Y-%m-%d %H:%M:%S') + '&end_date=' + end_date.strftime('%Y-%m-%d %H:%M:%S') + ".pickle.gz"
-        cache_path = os.path.join(cache_dir, subpath, cache_filename).replace(' ', '_').replace('&', '_').replace('?', '_')
-
-        return 'fast_cache://' + cache_path
-    except:
-        return ''
+    return ''
 
 
 def execute_query(path, parsed_qs, nospawn=False):
