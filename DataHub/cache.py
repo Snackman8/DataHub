@@ -7,6 +7,15 @@ import pandas as pd
 import traceback
 import urllib
 
+
+def decode_cache_to_df(result):
+    # check if this is already a pickle
+    if not isinstance(result, pd.DataFrame):
+        return pd.read_pickle(result, compression='gzip')
+    return result
+
+
+
 def _get_argument_info(func, arg_name):
     """
         return the argument index of the arg_name and also the default value
