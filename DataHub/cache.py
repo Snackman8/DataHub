@@ -15,20 +15,6 @@ def decode_cache_to_df(result):
     return result
 
 
-
-def _get_argument_info(func, arg_name):
-    """
-        return the argument index of the arg_name and also the default value
-    """
-    sig = inspect.signature(func)
-    i = 0
-    for k, v in sig.parameters.items():
-        if k == arg_name:
-            return i, v.default
-        i = i + 1
-    return None, None
-
-
 def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
     """ decorator to enable caching for data queries
 
@@ -56,17 +42,27 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                 nocache = kwargs.pop('nocache', False)
                 updatecache = kwargs.pop('updatecache', False)
 
+                # transfer args to kwargs
+                sig = inspect.signature(func)
+                param_names = list(sig.parameters)
+                for i in range(0, len(args)):
+                    kwargs[param_names[i]] = args[i]
+                args = []
+
                 if not nocache or updatecache:
                     # loop through the lag_aarams
                     cacheable = True
                     for param_name in lag_params:
-                        param_idx, param_default = _get_argument_info(func, param_name)
-                    
-                        # get the actual parameter value
-                        if param_idx < len(args):
-                            param_value = args[param_idx]
-                        else:
-                            param_value = kwargs.get(param_name, param_default)
+                        param_default = sig.parameters[param_name].default
+                        # #     for k, v in sig.parameters.items():
+                        #
+                        # param_idx, param_default = _get_argument_info(func, param_name)
+                        #
+                        # # get the actual parameter value
+                        # if param_idx < len(args):
+                        #     param_value = args[param_idx]
+                        # else:
+                        param_value = kwargs.get(param_name, param_default)
                         
                         # check if we are inside the lag
                         if param_value:
@@ -79,7 +75,7 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     subpath = os.path.splitext(os.path.split(filename)[1])[0]                    
                     params = []
                     for k in sorted(kwargs.keys()):
-                        params.append(f"""{urllib.parse.quote(k)}={urllib.parse.quote(kwargs[k])}""")
+                        params.append(f"""{urllib.parse.quote(k)}={urllib.parse.quote(str(kwargs[k]))}""")
                     s = '&'.join(params)                    
                     cache_filename = func.__name__ + '?' + s + ".pickle.gz"
                     cache_path = os.path.join(cache_dir, subpath, cache_filename).replace(' ', '_').replace('&', '_').replace('?', '_')
@@ -88,7 +84,9 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                             logging.info(f'READING CACHE {cache_path}')                            
                             with open(cache_path, "rb") as fh:
                                 buf = io.BytesIO(fh.read())
-                            return buf                           
+                            return buf
+                        else:
+                            logging.info(f'CACHE MISS {cache_path}')
 
                 # call the real data fetch function
                 df = func(*args, **kwargs)
