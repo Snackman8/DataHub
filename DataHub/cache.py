@@ -3,9 +3,9 @@ import inspect
 import io
 import logging
 import os
+import time
 import pandas as pd
 import traceback
-import urllib
 
 
 def decode_cache_to_df(result):
@@ -54,14 +54,6 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     cacheable = True
                     for param_name in lag_params:
                         param_default = sig.parameters[param_name].default
-                        # #     for k, v in sig.parameters.items():
-                        #
-                        # param_idx, param_default = _get_argument_info(func, param_name)
-                        #
-                        # # get the actual parameter value
-                        # if param_idx < len(args):
-                        #     param_value = args[param_idx]
-                        # else:
                         param_value = kwargs.get(param_name, param_default)
                         
                         # check if we are inside the lag
@@ -75,7 +67,11 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     subpath = os.path.splitext(os.path.split(filename)[1])[0]                    
                     params = []
                     for k in sorted(kwargs.keys()):
-                        params.append(f"""{urllib.parse.quote(k)}={urllib.parse.quote(str(kwargs[k]))}""")
+                        v = kwargs[k]
+                        for rc in '\\/?%*:|<>,;':
+                            k = k.replace(rc, '__')
+                            v = v.replace(rc, '__')
+                        params.append(f"""{k}={v}""")
                     s = '&'.join(params)                    
                     cache_filename = func.__name__ + '?' + s + ".pickle.gz"
                     cache_path = os.path.join(cache_dir, subpath, cache_filename).replace(' ', '_').replace('&', '_').replace('?', '_')
@@ -89,6 +85,7 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                             logging.info(f'CACHE MISS {cache_path}')
 
                 # call the real data fetch function
+                st = time.time()
                 df = func(*args, **kwargs)
 
                 # write cache if needed
@@ -96,8 +93,18 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     try:
                         logging.info(f'WRITING CACHE {cache_path}')
                         if not os.path.exists(os.path.dirname(cache_path)):
-                            os.makedirs(os.path.dirname(cache_path))                            
-                        df.to_pickle(cache_path)
+                            os.makedirs(os.path.dirname(cache_path))
+                        st = time.time()
+
+                        bio = io.BytesIO()
+                        df.to_pickle(bio, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+                        bio.seek(0)
+                        with open(cache_path, 'wb') as f:
+                            f.write(bio.read())
+                        bio.seek(0)
+                        print(time.time() - st)
+                        logging.info(f'FINISHED WRITING CACHE {cache_path}')
+                        return bio
                     except Exception as e:
                         print(e)
 

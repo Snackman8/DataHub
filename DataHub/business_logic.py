@@ -115,7 +115,7 @@ def _execute_query_worker(path, parsed_qs):
     # check if this is already a pickle
     if not isinstance(result, io.BytesIO):
         f = io.BytesIO()
-        result.to_pickle(f, compression='gzip')
+        result.to_pickle(f, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
         f.seek(0)
         result = f.read()
         f.close()
