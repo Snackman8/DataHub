@@ -1,4 +1,5 @@
 from functools import wraps
+import hashlib
 import inspect
 import io
 import logging
@@ -55,7 +56,7 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     for param_name in lag_params:
                         param_default = sig.parameters[param_name].default
                         param_value = kwargs.get(param_name, param_default)
-                        
+
                         # check if we are inside the lag
                         if param_value:
                             if (pd.Timestamp.utcnow().tz_localize(None) - pd.to_datetime(param_value)) <= lag_from_utc_now:
@@ -64,7 +65,9 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                 # check if we can read from the cache
                 if cacheable:
                     # build the cache_path
-                    subpath = os.path.splitext(os.path.split(filename)[1])[0]                    
+                    subpath = os.path.splitext(os.path.split(filename)[1])[0]
+
+                    # build params traditional way
                     params = []
                     for k in sorted(kwargs.keys()):
                         v = kwargs[k]
@@ -72,12 +75,26 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                             k = k.replace(rc, '__')
                             v = v.replace(rc, '__')
                         params.append(f"""{k}={v}""")
-                    s = '&'.join(params)                    
+                    s = '&'.join(params)
                     cache_filename = func.__name__ + '?' + s + ".pickle.gz"
+
+                    # check if filename is too long
+                    if len(cache_filename) > 250:
+                        # filename too long due to parameters, switch to shortened style
+                        ks = []
+                        vs = []
+                        for k in sorted(kwargs.keys()):
+                            ks.append(k)
+                            vs.append(str(kwargs[k]))
+                        param_str = ('_params=' + hashlib.md5((','.join(ks)).encode('ascii')).hexdigest() +
+                                     '_' + hashlib.md5((','.join(vs)).encode('ascii')).hexdigest())
+                        cache_filename = func.__name__ + '?' + param_str + ".pickle.gz"
+
+                    # normalize cachepath
                     cache_path = os.path.join(cache_dir, subpath, cache_filename).replace(' ', '_').replace('&', '_').replace('?', '_')
                     if not updatecache:
                         if os.path.exists(cache_path):
-                            logging.info(f'READING CACHE {cache_path}')                            
+                            logging.info(f'READING CACHE {cache_path}')
                             with open(cache_path, "rb") as fh:
                                 buf = io.BytesIO(fh.read())
                             return buf
@@ -112,7 +129,7 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                 return df
             except Exception as e:
                 # print the traceback
-                logging.error(traceback.format_exc())                
+                logging.error(traceback.format_exc())
 
                 # call the real data fetch function
                 df = func(*args, **kwargs)
