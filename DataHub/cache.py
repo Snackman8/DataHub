@@ -70,7 +70,7 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                     # build params traditional way
                     params = []
                     for k in sorted(kwargs.keys()):
-                        v = kwargs[k]
+                        v = str(kwargs[k])
                         for rc in '\\/?%*:|<>,;':
                             k = k.replace(rc, '__')
                             v = v.replace(rc, '__')
@@ -111,15 +111,12 @@ def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
                         logging.info(f'WRITING CACHE {cache_path}')
                         if not os.path.exists(os.path.dirname(cache_path)):
                             os.makedirs(os.path.dirname(cache_path))
-                        st = time.time()
-
                         bio = io.BytesIO()
                         df.to_pickle(bio, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
                         bio.seek(0)
                         with open(cache_path, 'wb') as f:
                             f.write(bio.read())
                         bio.seek(0)
-                        print(time.time() - st)
                         logging.info(f'FINISHED WRITING CACHE {cache_path}')
                         return bio
                     except Exception as e:
