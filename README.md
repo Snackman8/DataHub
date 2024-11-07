@@ -15,7 +15,7 @@ sudo mkdir /srv/DataHub_Modules
 
 Copy the supervisor conf file and reload supervisor so DataHub will auto start
 ```
-sudo cp ~/DataHub/deployment_configs/supervisor_DataHub.conf to /etc/supervisor/conf.d/
+sudo cp ~/DataHub/deployment_configs/supervisor_DataHub.conf /etc/supervisor/conf.d/
 sudo supervisorctl reload
 sudo supervisorctl restart DataHub
 ```
