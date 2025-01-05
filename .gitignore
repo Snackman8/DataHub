@@ -6,6 +6,7 @@
 *_report.txt
 *_results.xml
 __pycache__
+keys.db
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -5,97 +5,167 @@
 import argparse
 import logging
 import os
+import sqlite3
 import sys
 import traceback
-from urllib.parse import urlparse, parse_qs
-import DataHub.business_logic as business_logic
-from pylinkjs.PyLinkJS import run_pylinkjs_app
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import Response, FileResponse
+import uvicorn
+import business_logic
 
 
 # --------------------------------------------------
-#    Constants
+#    Globals
 # --------------------------------------------------
-DEFAULT_PORT = 9151
+app = FastAPI()
+
+
+# --------------------------------------------------
+#    Functions
+# --------------------------------------------------
+def _str_to_bool(value):
+    """
+    Convert a string to a boolean. Recognizes "true", "yes", "1" as True and
+    "false", "no", "0" as False (case-insensitive). Raises ValueError for invalid input.
+    """
+    truthy = {"true", "t", "yes", "y", "1"}
+    falsy = {"false", "f", "no", "n", "0"}
+    value = value.strip().lower()
+    if value in truthy:
+        return True
+    elif value in falsy:
+        return False
+    raise ValueError(f"Invalid boolean value: {value}")
+
+
+def _validate_api_key(access_key: str, secret_key: str):
+    """
+    Validates the provided access_key and secret_key against the database.
+    Also checks if the current date is within the valid start_date and end_date range.
+    """
+    if not access_key or not secret_key:
+        raise HTTPException(status_code=400, detail="Missing Access-Key or Secret-Key")
+
+    try:
+        # Connect to the database
+        conn = sqlite3.connect(app.state.db_path)  # Replace with your database path
+        conn.row_factory = sqlite3.Row  # Enable dict-like access
+        cursor = conn.cursor()
+
+        # Query to validate the keys and date range
+        cursor.execute("""
+            SELECT * FROM keys
+            WHERE access_key = ? AND secret_key = ?
+              AND status = 'Active'
+              AND (start_date_UTC IS NULL OR start_date_UTC <= date('now'))
+              AND (end_date_UTC IS NULL OR end_date_UTC >= date('now'))
+        """, (access_key, secret_key))
+
+        key_info = cursor.fetchone()
+        conn.close()
+
+        if not key_info:
+            raise HTTPException(status_code=401, detail="Invalid or expired API keys")
+
+        return key_info  # Return validated key information if needed
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # --------------------------------------------------
 #    Handlers
 # --------------------------------------------------
-def ready(jsc, *args):
-    """ called when a webpage creates a new connection the first time on load """
-    pass
+@app.on_event("startup")
+async def startup_event():
+    app.state.module_path = os.getenv("MODULE_PATH", "missing")
+    app.state.disable_auth = _str_to_bool(os.getenv("DISABLE_AUTH", 'False'))
+    app.state.db_path = os.getenv('DB_PATH', '')
+    app.state.allow_url_auth = _str_to_bool(os.getenv("ALLOW_URL_AUTH", 'False'))
+
+    # modify the sys path if needed
+    if app.state.module_path != '.':
+        if app.state.module_path not in sys.path:
+            sys.path.append(app.state.module_path)
 
 
-def handle_404(path, uri, host, extra_settings, *args):
-    """ called when a .html file can not be found for the path
-
-        returns data, the content_type for the data, i.e. "text/plain" and an HTTP return code
-
-        Args:
-            path - path to load for which no .html file was found
-            uri - full uri with parameters, i.e. /a/b?c=d&e=f
-            host - host which is handling this request
-            extra_settings - extra setings from the application
-
-        Returns:
-            result, content_type, return_code
+@app.get("/{full_path:path}")
+def handle_all_requests(full_path: str, request: Request=None):
     """
-    # retrieve the qid, auithuser, authtoken, and callerid
-    parsed_url = urlparse(uri)
-    parsed_qs = parse_qs(parsed_url.query)
-    qid = parsed_qs.get('qid', '')
+    Handles all incoming requests dynamically:
+    - Validates API keys passed as query parameters.
+    - Serves static files if the path is a file.
+    - Executes business logic for non-file requests.
+    """
+    # Parse query parameters
+    parsed_qs = dict(request.query_params)
+    qid = parsed_qs.get("qid", "")
+    nospawn = parsed_qs.pop("nospawn", [""])[0]
+    access_key = parsed_qs.pop("Access-Key", None)
+    secret_key = parsed_qs.pop("Secret-Key", None)
 
-    # retrieve security tokens
-    authuser = parsed_qs.pop('authuser', [''])[0]
-    authtoken = parsed_qs.pop('authtoken', [''])[0]
-    callerid = parsed_qs.pop('callerid', [''])[0]
-    nospawn = parsed_qs.pop('nospawn', [''])[0]
+    if not app.state.disable_auth:
+        if not app.state.allow_url_auth:
+            if access_key or secret_key:
+                raise HTTPException(status_code=400, detail='Access-Key and Secret-Key are not allowed to be passed in through the URL unless --allow_url_auth is set')
+
+        # Check headers
+        access_key = request.headers.get("Access-Key", access_key)
+        secret_key = request.headers.get("Secret-Key", secret_key)
+
+        # Validate API keys
+        _validate_api_key(access_key, secret_key)
+
+    # Serve static files
+    if os.path.isfile(full_path):
+        return FileResponse(full_path)
+
 
     try:
-        # check if the qid parameter was passed in
-        if qid == '':
-            # try to display the html docs for the module
-            html, content_type, return_code = business_logic.build_html_docs(host, path, extra_settings['modulepath'],
-                                                                             authuser, authtoken, callerid)
-            return (html, content_type, return_code)
+        if qid == "":
+            # Generate and return HTML documentation
+            html, content_type, return_code = business_logic.build_html_docs(
+                host=request.headers.get("host", ""),
+                path=full_path,
+                module_path=app.state.module_path
+            )
+            return Response(content=html, media_type="text/html", status_code=200)
         else:
-            # execute the query
-            parsed_qs = {k:v[0] for k, v in parsed_qs.items()}
-            retval = business_logic.execute_query(path, parsed_qs, nospawn not in ['', '0'])
-            if len(retval) == 4:
-                html, content_type, return_code, headers = retval
-            else:
-                html, content_type, return_code = retval
-                headers = {}
-            return (html, content_type, return_code, headers)
+            # Execute query logic
+            html, content_type, return_code, headers = business_logic.execute_query(
+                full_path, parsed_qs, nospawn not in ["", "0"]
+            )
+            return Response(content=html, media_type=content_type, status_code=return_code, headers=headers)
     except:
-        html = f'<pre>{traceback.format_exc()}</pre>'
-        return (html, 'text/html', 500)
+        html = f"<pre>{traceback.format_exc()}</pre>"
+        return Response(content=html, media_type="text/html", status_code=500)
 
 
 # --------------------------------------------------
 #    Main
 # --------------------------------------------------
-def main():
-    # parse the arguments
-    default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')     
+def main(args):
+    os.environ["MODULE_PATH"] = args['module_path']
+    os.environ["DISABLE_AUTH"] = str(args['disable_auth'])
+    os.environ["DB_PATH"] = str(args['db_path'])
+    os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
+    uvicorn.run("dataHub:app", host="0.0.0.0", port=args['port'], reload=False)
+
+
+if __name__ == "__main__":
+    # parse command line arguments
+    default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, help="port to run on", default=DEFAULT_PORT, required=False)
-    parser.add_argument("--modulepath", help="location of additional modules", default=default_provider_path, required=False)
-    args = vars(parser.parse_args())
-    print(args)
+    parser.add_argument("--port", type=int, help="port to serve webapp on", default=9151, required=False)
+    parser.add_argument("--loglevel", help="logging level, i.e. INFO", default='INFO', required=False)
+    parser.add_argument("--module_path", help="location of additional modules", default=default_provider_path, required=False)
+    parser.add_argument("--disable_auth", help="Disable authentication for testing (default: False)", action="store_true", default='False')
+    parser.add_argument("--allow_url_auth", help="Allow authentication by passing in access key and secret key in URL (insecure)", action="store_true", default='False')
+    parser.add_argument("--db_path", help="Path to the SQLite database file (default: my_database.db)", type=str, default="keys.db")
+    args = parser.parse_args()
+    args = vars(args)
 
-    # modify the sys path if needed
-    if args['modulepath'] != '.':
-        sys.path.append(args['modulepath'])
+    # start the thread and the app
+    logging.basicConfig(level=args['loglevel'].upper(), format='%(asctime)s %(relativeCreated)6d %(threadName)s %(message)s')
 
-    # run the application
-    logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
-
-    run_pylinkjs_app(default_html='this_should_never_exist', on_404=handle_404, port=args['port'],
-                     extra_settings={'modulepath': args['modulepath']})
-
-
-if __name__ == '__main__':
-    main()
-    
+    # run the main
+    main(args)

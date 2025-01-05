@@ -86,7 +86,7 @@ CSV Output
 Example Query: &output=csv&start_date=2024-08-01&end_date=2024-08-10
 
 HTML Output
-Example Query: &output=html&start_date'2024-08-01&end_date=2024-08-10    
+Example Query: &output=html&start_date'2024-08-01&end_date=2024-08-10
     """
     df = random_data(3,3)
     df['start_date'] = pd.to_datetime(start_date)

@@ -1,135 +1,141 @@
 from functools import wraps
 import hashlib
 import inspect
-import io
 import logging
 import os
-import time
 import pandas as pd
 import traceback
+import time
 
 
-def decode_cache_to_df(result):
-    # check if this is already a pickle
-    if not isinstance(result, pd.DataFrame):
-        return pd.read_pickle(result, compression='gzip')
-    return result
+def _generate_cache_filename(func_name, kwargs):
+    """
+    Generate a cache filename based on function name and parameters.
+
+    Args:
+        func_name (str): The name of the function.
+        kwargs (dict): The function arguments as key-value pairs.
+
+    Returns:
+        str: A sanitized cache filename.
+    """
+    params = [f"{k}={str(v)}" for k, v in sorted(kwargs.items())]
+    param_str = '&'.join(params)
+    if len(param_str) > 250:
+        ks = ','.join(sorted(kwargs.keys()))
+        vs = ','.join([str(kwargs[k]) for k in sorted(kwargs.keys())])
+        param_str = '_params=' + hashlib.md5(ks.encode('ascii')).hexdigest() + \
+                    '_' + hashlib.md5(vs.encode('ascii')).hexdigest()
+    return f"{func_name}?{param_str}.pickle.gz"
+
+
+def _sanitize_path_component(component):
+    """
+    Sanitize a string for use in a file path by replacing reserved characters.
+
+    Args:
+        component (str): The string to sanitize.
+
+    Returns:
+        str: A sanitized string.
+    """
+    reserved_chars = '\\/?%*:|<>,;'
+    for rc in reserved_chars:
+        component = component.replace(rc, '__')
+    return component
+
+
+def _write_to_cache(df, cache_path):
+    """
+    Write a DataFrame to a compressed cache file.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to cache.
+        cache_path (str): The file path for the cache.
+    """
+    if not os.path.exists(os.path.dirname(cache_path)):
+        os.makedirs(os.path.dirname(cache_path))
+    df.to_pickle(cache_path, compression={"method": "gzip", "compresslevel": 1, "mtime": 1})
+    logging.info(f"Cache written to: {cache_path}")
 
 
 def cacheable(cache_dir, filename, lag_params=[], lag_from_utc_now=None):
-    """ decorator to enable caching for data queries
+    """
+    Decorator to enable caching for data-fetching functions.
 
-        Additional parameters of nocache to bypass the cache and updatecache to force a cache update can
-        be passed in.
+    Args:
+        cache_dir (str): Root directory for cache storage.
+        filename (str): Filename of the script (e.g., __file__), used for cache subdirectories.
+        lag_params (list): List of parameter names to check against the lag constraint.
+        lag_from_utc_now (pd.Timedelta): A timedelta specifying the lag window for caching.
+        nocache (bool, optional): If True, bypasses the cache entirely. Default is False.
+        updatecache (bool, optional): If True, forces a cache update even if a cached result exists. Default is False.
 
-        Args:
-            cache_dir - root dir for the cache, i.e. /srv/DataHub_Cache
-            filename - filename of the file containing the code for the query, usually the __file__ variable is used
-            lag_param - list of parameters to check lag aginast, i.e. ["end_date"]
-            lag_from_utc_now - a timedelta specifying the lag for caching.  i.e. timedelta(days=2) means nothing within the last two days will be cached
+    Returns:
+        Callable: The decorated function with caching applied.
+
+    Raises:
+        Exception: If an unexpected error occurs in the function or caching process.
     """
     def decorator(func):
-        """ decorator function """
         @wraps(func)
         def new_func(*args, **kwargs):
-            """
-                nocache
-                updatecache
-            """
             try:
-                """ internal new func for the decorator """
-                # do not bother if nocache is set
-                cacheable = False
-                nocache = kwargs.pop('nocache', False)
-                updatecache = kwargs.pop('updatecache', False)
+                # Transfer args to kwargs
+                bound_args = inspect.signature(func).bind(*args, **kwargs)
+                bound_args.apply_defaults()
+                kwargs = bound_args.arguments.copy()
 
-                # transfer args to kwargs
-                sig = inspect.signature(func)
-                param_names = list(sig.parameters)
-                for i in range(0, len(args)):
-                    kwargs[param_names[i]] = args[i]
-                args = []
+                nocache = kwargs.pop("nocache", False)
+                updatecache = kwargs.pop("updatecache", False)
 
-                if not nocache or updatecache:
-                    # loop through the lag_aarams
-                    cacheable = True
-                    for param_name in lag_params:
-                        param_default = sig.parameters[param_name].default
-                        param_value = kwargs.get(param_name, param_default)
+                # Skip caching if `nocache` is True
+                if nocache:
+                    logging.info("Skipping cache due to nocache flag.")
+                    return func(*args, **kwargs)
 
-                        # check if we are inside the lag
-                        if param_value:
-                            if (pd.Timestamp.utcnow().tz_localize(None) - pd.to_datetime(param_value)) <= lag_from_utc_now:
-                                cacheable = False
+                # Check if cacheable based on lag
+                cacheable = True
+                if lag_params and lag_from_utc_now:
+                    for param in lag_params:
+                        param_value = kwargs.get(param)
+                        if param_value and (
+                            pd.Timestamp.utcnow().tz_localize(None) - pd.to_datetime(param_value).tz_localize(None)
+                        ) <= lag_from_utc_now:
+                            cacheable = False
+                            break
 
-                # check if we can read from the cache
-                if cacheable:
-                    # build the cache_path
-                    subpath = os.path.splitext(os.path.split(filename)[1])[0]
+                # Generate cache path
+                cache_filename = _generate_cache_filename(func.__name__, kwargs)
+                cache_path = os.path.join(
+                    cache_dir,
+                    _sanitize_path_component(os.path.splitext(os.path.basename(filename))[0]),
+                    _sanitize_path_component(cache_filename),
+                )
 
-                    # build params traditional way
-                    params = []
-                    for k in sorted(kwargs.keys()):
-                        v = str(kwargs[k])
-                        for rc in '\\/?%*:|<>,;':
-                            k = k.replace(rc, '__')
-                            v = v.replace(rc, '__')
-                        params.append(f"""{k}={v}""")
-                    s = '&'.join(params)
-                    cache_filename = func.__name__ + '?' + s + ".pickle.gz"
+                # Read from cache if applicable
+                if cacheable and not updatecache:
+                    if os.path.exists(cache_path):
+                        logging.info(f"Reading from cache: {cache_path}")
+                        return pd.read_pickle(cache_path, compression="gzip")
+                    else:
+                        logging.info(f"Cache miss: {cache_path}")
 
-                    # check if filename is too long
-                    if len(cache_filename) > 250:
-                        # filename too long due to parameters, switch to shortened style
-                        ks = []
-                        vs = []
-                        for k in sorted(kwargs.keys()):
-                            ks.append(k)
-                            vs.append(str(kwargs[k]))
-                        param_str = ('_params=' + hashlib.md5((','.join(ks)).encode('ascii')).hexdigest() +
-                                     '_' + hashlib.md5((','.join(vs)).encode('ascii')).hexdigest())
-                        cache_filename = func.__name__ + '?' + param_str + ".pickle.gz"
-
-                    # normalize cachepath
-                    cache_path = os.path.join(cache_dir, subpath, cache_filename).replace(' ', '_').replace('&', '_').replace('?', '_')
-                    if not updatecache:
-                        if os.path.exists(cache_path):
-                            logging.info(f'READING CACHE {cache_path}')
-                            with open(cache_path, "rb") as fh:
-                                buf = io.BytesIO(fh.read())
-                            return buf
-                        else:
-                            logging.info(f'CACHE MISS {cache_path}')
-
-                # call the real data fetch function
-                st = time.time()
+                # Call the original function
                 df = func(*args, **kwargs)
 
-                # write cache if needed
-                if cacheable:
-                    try:
-                        logging.info(f'WRITING CACHE {cache_path}')
-                        if not os.path.exists(os.path.dirname(cache_path)):
-                            os.makedirs(os.path.dirname(cache_path))
-                        bio = io.BytesIO()
-                        df.to_pickle(bio, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-                        bio.seek(0)
-                        with open(cache_path, 'wb') as f:
-                            f.write(bio.read())
-                        bio.seek(0)
-                        logging.info(f'FINISHED WRITING CACHE {cache_path}')
-                        return bio
-                    except Exception as e:
-                        print(e)
+                # Write to cache if applicable
+                if cacheable and isinstance(df, pd.DataFrame):
+                    start_time = time.time()
+                    _write_to_cache(df, cache_path)
+                    logging.info(f"Cache written in {time.time() - start_time:.2f}s")
 
-                # success!
                 return df
+            except (OSError, IOError) as e:
+                logging.error(f"Cache operation failed: {e}. Skipping cache.")
+                return func(*args, **kwargs)
             except Exception as e:
-                # print the traceback
                 logging.error(traceback.format_exc())
-
-                # call the real data fetch function
-                df = func(*args, **kwargs)
-                return df
+                raise
         return new_func
     return decorator

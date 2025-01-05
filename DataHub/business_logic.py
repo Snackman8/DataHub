@@ -15,26 +15,17 @@ import pandas as pd
 # --------------------------------------------------
 #    Functions
 # --------------------------------------------------
-def _build_html_docs_worker(host, path, modulepath, authuser, authtoken, callerid):
+def _build_html_docs_worker(host, path, module_path):
     """ worker to build html docs for a path """
 
     # add style sheet
     html = '<head><link rel="stylesheet" href="/style.css"></head>'
     html = html + f'<h1><a href="/">DataHub Information</a></h1><pre class=path>Path: /{path}</pre><hr>'
 
-    # build the authentication tail
-    tail = ''
-    if authuser != '':
-        tail = tail + f'&authuser={authuser}'
-    if authtoken != '':
-        tail = tail + f'&authtoken={authtoken}'
-    if callerid != '':
-        tail = tail + f'&callerid={callerid}'
-
     # check if we are loading a python file
-    if not os.path.exists(os.path.join(modulepath, path) + '.py'):
+    if not os.path.exists(os.path.join(module_path, path) + '.py'):
         # does not exist, so build a directory listing
-        dir_list =sorted(os.listdir(os.path.join(modulepath, path)))
+        dir_list = sorted(os.listdir(os.path.join(module_path, path)))
 
         for x in dir_list:
             if not x.startswith('.') and not x.startswith('_'):
@@ -43,11 +34,11 @@ def _build_html_docs_worker(host, path, modulepath, authuser, authtoken, calleri
                         x = x[:-3]
                         m = importlib.import_module(os.path.join(path, x).replace('/', '.'))
                     else:
-                        m = importlib.import_module(os.path.join(path, x))
+                        m = importlib.import_module(os.path.join(path, x).replace('/', '.'))
                     html = html + f'<div class=divmodule><h4>/{os.path.join(path, x)}</h4>'
                     if m.__doc__:
                         html = html + f'<pre class=doc>{m.__doc__}</pre>'
-                    aref = 'http://' + os.path.join(host, path, x) + (('?' + tail[1:]) if tail else '')
+                    aref = 'http://' + os.path.join(host, path, x) #+ (('?' + tail[1:]) if tail else '')
                     html = html + f'<a class=a href={aref}>{aref}</a>'
                     html = html + f'<hr></div>'
                 except:
@@ -78,7 +69,8 @@ def _build_html_docs_worker(host, path, modulepath, authuser, authtoken, calleri
             for x in docs.split('\n'):
                 if 'Example Query: ' in x:
                     aref = x.partition('Example Query:')[2].strip()
-                    aref = f"http://{host}/{path}?qid={name}{aref}{tail}"
+#                    aref = f"http://{host}/{path}?qid={name}{aref}{tail}"
+                    aref = f"http://{host}/{path}?qid={name}{aref}"
                     x = f'<a href={aref}>{aref}</a>'
                 doc_lines.append(x)
             docs = '\n'.join(doc_lines)
@@ -88,19 +80,19 @@ def _build_html_docs_worker(host, path, modulepath, authuser, authtoken, calleri
     return html, 'text/html', 200
 
 
-def build_html_docs(host, path, modulepath, authuser, authtoken, callerid):
+def build_html_docs(host, path, module_path):
     """ build html docs for a path
 
         Args:
             host - host the server is running on, i.e. ccgtdev.commercecasino.local
             path - path to inspect to build documentation for
-            modulepath - system path to the modules
+            module_path - system path to the modules
 
         Returns:
             html docs
     """
     with concurrent.futures.ProcessPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_build_html_docs_worker, host, path, modulepath, authuser, authtoken, callerid)
+        future = executor.submit(_build_html_docs_worker, host, path, module_path)
         result = future.result()
         return result
 
