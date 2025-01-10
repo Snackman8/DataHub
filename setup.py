@@ -26,6 +26,6 @@ setup(name='DataHub',
       packages=['DataHub', 'DataHub.example_providers.example'],
       install_requires=[],
       entry_points={
-        'console_scripts': ['datahub_server=DataHub.dataHub:main'],
+        'console_scripts': ['datahub_server=DataHub.dataHub:console_entry'],
         }
       )
