@@ -11,7 +11,8 @@ import traceback
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response, FileResponse
 import uvicorn
-import business_logic
+from DataHub.openapi_schema_generator import generate_openapi_schema
+import DataHub.business_logic as business_logic
 
 
 # --------------------------------------------------
@@ -115,13 +116,32 @@ def handle_all_requests(full_path: str, request: Request=None):
         # Validate API keys
         _validate_api_key(access_key, secret_key)
 
-    # Serve static files
-    if os.path.isfile(full_path):
-        return FileResponse(full_path)
-
+    # special case for schema
+    if full_path == 'schema':
+        schema = generate_openapi_schema(app.state.module_path, os.environ["OPENAPI_SERVER_URL"])
+        return Response(content=schema, media_type="text/plain", status_code=200)
 
     try:
         if qid == "":
+            # Serve static files if possible
+            if os.path.isfile(full_path):
+                return FileResponse(full_path)
+
+            # check if this can be handled as a query
+            try:
+                # Execute query logic as if last part of path was a qid
+                if '/' in full_path:
+                    tmp_full_path, qid = full_path.rsplit('/', 1)
+                    tmp_parsed_qs = dict(parsed_qs)
+                    tmp_parsed_qs['qid'] = qid
+                    html, content_type, return_code, headers = business_logic.execute_query(
+                        tmp_full_path, tmp_parsed_qs, nospawn not in ["", "0"]
+                    )
+                    return Response(content=html, media_type=content_type, status_code=return_code, headers=headers)
+            except Exception as e:
+                print(e)
+                pass
+
             # Generate and return HTML documentation
             html, content_type, return_code = business_logic.build_html_docs(
                 host=request.headers.get("host", ""),
@@ -148,10 +168,11 @@ def main(args):
     os.environ["DISABLE_AUTH"] = str(args['disable_auth'])
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
-    uvicorn.run("dataHub:app", host="0.0.0.0", port=args['port'], reload=False)
+    os.environ["OPENAPI_SERVER_URL"] = str(args['openapi_server_url'])
+    uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False)
 
 
-if __name__ == "__main__":
+def console_entry():
     # parse command line arguments
     default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')
     parser = argparse.ArgumentParser()
@@ -161,6 +182,7 @@ if __name__ == "__main__":
     parser.add_argument("--disable_auth", help="Disable authentication for testing (default: False)", action="store_true", default='False')
     parser.add_argument("--allow_url_auth", help="Allow authentication by passing in access key and secret key in URL (insecure)", action="store_true", default='False')
     parser.add_argument("--db_path", help="Path to the SQLite database file (default: my_database.db)", type=str, default="keys.db")
+    parser.add_argument("--openapi_server_url", help="OpenAPI Schema server url", type=str, default="http://localhost")
     args = parser.parse_args()
     args = vars(args)
 
@@ -169,3 +191,8 @@ if __name__ == "__main__":
 
     # run the main
     main(args)
+
+
+if __name__ == "__main__":
+    # parse command line arguments
+    console_entry()

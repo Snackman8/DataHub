@@ -25,27 +25,34 @@ if os.path.isfile(CONFIG_FILE):
 # --------------------------------------------------
 def random_data(rows, cols):
     """
-return a dataframe with random data
+Generate a DataFrame with random data.
+
+This function creates a DataFrame with the specified number of rows and columns,
+filled with random integers. Additional columns include the process ID (`pid`)
+and the current timestamp (`time`).
 
 Params:
-    rows - number of rows of random data
-    cols - number of columns of random data
+    rows - (int) The number of rows of random data to generate.
+    cols - (int) The number of columns of random data to generate.
 
-CSV Output
-Example Query: &output=csv&rows=5&cols=1
+CSV Output:
+Example Query: &output=csv&rows=5&cols=3
 
-HTML Output
-Example Query: &output=html&rows=5&cols=1
+HTML Output:
+Example Query: &output=html&rows=5&cols=3
 
-Example Output
-    ,0,pid,time
-    0,486,2689007,1710093848.8563957
-    1,598,2689007,1710093848.8563957
-    2,93,2689007,1710093848.8563957
-    3,317,2689007,1710093848.8563957
-    4,416,2689007,1710093848.8563957
+Example Output:
+       ,0,1,2,pid,time
+    0,486,268,900,1710093848.8563957
+    1,598,423,345,1710093848.8563957
+    2,93,759,981,1710093848.8563957
+    3,102,487,346,1710093848.8563957
+    4,317,592,478,1710093848.8563957
+
+Additional Notes:
+    - Reads secrets from the configuration file if available.
+    - Logs process ID to demonstrate parallel processing capability.
     """
-
     # read a secret example
     # example of secrets file at /etc/datamodule_example.conf
     #    ['Secrets']
@@ -80,13 +87,26 @@ Example Output
 
 def random_data_date(start_date, end_date):
     """
-random_data_date
+Generate random data with dates.
 
-CSV Output
+This function creates a DataFrame containing random data along with the specified
+start_date and end_date as additional columns.
+
+Params:
+    start_date - (str) The start of the date range. Should be in YYYY-MM-DD format.
+    end_date - (str) The end of the date range. Should be in YYYY-MM-DD format.
+
+CSV Output:
 Example Query: &output=csv&start_date=2024-08-01&end_date=2024-08-10
 
-HTML Output
-Example Query: &output=html&start_date'2024-08-01&end_date=2024-08-10
+HTML Output:
+Example Query: &output=html&start_date=2024-08-01&end_date=2024-08-10
+
+Example Output:
+       ,0,1,2,pid,time,start_date,end_date
+    0,780,103,720,579429,1736461744.2224698,2024-08-01,2024-08-10
+    1,437,521,109,579429,1736461744.2224698,2024-08-01,2024-08-10
+    2,153,943,313,579429,1736461744.2224698,2024-08-01,2024-08-10
     """
     df = random_data(3,3)
     df['start_date'] = pd.to_datetime(start_date)
@@ -96,14 +116,43 @@ Example Query: &output=html&start_date'2024-08-01&end_date=2024-08-10
 
 # add 7 hours becase Los Angeles is 7 hours behind UTC time, in reality the lag will be 1 day
 @cacheable(cache_dir='/tmp', filename=__file__, lag_params=['start_date', 'end_date'], lag_from_utc_now=datetime.timedelta(days=1, hours=7))
-def random_data_date_cached(start_date, end_date):
+def generate_date_dataframe(start_date, end_date):
     """
-random_data_date_cached
+Generate a DataFrame with all dates between start_date and end_date.
+Each row contains:
+    - date
+    - number of days since epoch
 
-CSV Output
-Example Query: &output=csv&start_date=2024-08-01&end_date=2024-08-10
+Params:
+    start_date - (str) The start of the date range (inclusive). Should be in YYYY-MM-DD format.
+    end_date - (str) The end of the date range (inclusive). Should be in YYYY-MM-DD format.
 
-HTML Output
-Example Query: &output=html&start_date=2024-08-01&end_date=2024-08-10
+CSV Output:
+Example Query: &output=csv&start_date=2024-08-01&end_date=2024-08-05
+
+HTML Output:
+Example Query: &output=html&start_date=2024-08-01&end_date=2024-08-05
+
+Example Output:
+                  date  days_since_epoch
+      0 2024-08-01             19723
+      1 2024-08-02             19724
+      2 2024-08-03             19725
+      3 2024-08-04             19726
+      4 2024-08-05             19727
     """
-    return random_data_date(start_date, end_date)
+    # Convert input strings to datetime objects
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+
+    # Generate a range of dates
+    date_range = pd.date_range(start=start_date, end=end_date)
+
+    # Create the DataFrame
+    epoch = datetime.datetime(1970, 1, 1)
+    df = pd.DataFrame({
+        'date': date_range,
+        'days_since_epoch': [(date - epoch).days for date in date_range]
+    })
+
+    return df

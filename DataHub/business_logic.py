@@ -68,10 +68,11 @@ def _build_html_docs_worker(host, path, module_path):
             doc_lines = []
             for x in docs.split('\n'):
                 if 'Example Query: ' in x:
-                    aref = x.partition('Example Query:')[2].strip()
-#                    aref = f"http://{host}/{path}?qid={name}{aref}{tail}"
-                    aref = f"http://{host}/{path}?qid={name}{aref}"
+                    aref_params = x.partition('Example Query:')[2].strip()
+                    aref = f"http://{host}/{path}?qid={name}{aref_params}"
                     x = f'<a href={aref}>{aref}</a>'
+                    aref = f"http://{host}/{path}/{name}?{aref_params[1:]}"
+                    x = x + f'<br><a href={aref}>{aref}</a>'
                 doc_lines.append(x)
             docs = '\n'.join(doc_lines)
 
