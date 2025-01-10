@@ -3,6 +3,7 @@
 #    Imports
 # --------------------------------------------------
 import argparse
+import json
 import logging
 import os
 import sqlite3
@@ -113,6 +114,15 @@ def handle_all_requests(full_path: str, request: Request=None):
         access_key = request.headers.get("Access-Key", access_key)
         secret_key = request.headers.get("Secret-Key", secret_key)
 
+        # check if passed in using x-api-key
+        try:
+            if 'x-api-key' in request.headers:
+                auth_keys = json.loads(request.headers['x-api-key'])
+                access_key = auth_keys.get('Access-Key', access_key)
+                secret_key = auth_keys.get('Secret-Key', secret_key)
+        except:
+            logging.exception('Exception while handling x-api-key header')
+
         # Validate API keys
         _validate_api_key(access_key, secret_key)
 
@@ -169,7 +179,7 @@ def main(args):
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
     os.environ["OPENAPI_SERVER_URL"] = str(args['openapi_server_url'])
-    uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False)
+    uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
 
 
 def console_entry():

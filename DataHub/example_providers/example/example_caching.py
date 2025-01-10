@@ -31,7 +31,7 @@ if os.path.isfile(CONFIG_FILE):
 #    Queries
 # --------------------------------------------------
 @cacheable(cache_dir=CACHE_DIR, filename=__file__, lag_params=["end_date"], lag_from_utc_now=timedelta(days=1))
-def fetch_stock_prices(ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
+def fetch_stock_prices(ticker, start_date, end_date):
     """
 Fetch simulated stock prices for a given ticker and date range.
 
