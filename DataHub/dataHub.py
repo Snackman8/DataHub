@@ -12,8 +12,12 @@ import traceback
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response, FileResponse
 import uvicorn
-from DataHub.openapi_schema_generator import generate_openapi_schema
-import DataHub.business_logic as business_logic
+try:
+    from DataHub.openapi_schema_generator import generate_openapi_schema
+    import DataHub.business_logic as business_logic
+except:
+    from openapi_schema_generator import generate_openapi_schema
+    import business_logic
 
 
 # --------------------------------------------------
@@ -179,7 +183,10 @@ def main(args):
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
     os.environ["OPENAPI_SERVER_URL"] = str(args['openapi_server_url'])
-    uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
+    try:
+        uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
+    except:
+        uvicorn.run("dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
 
 
 def console_entry():

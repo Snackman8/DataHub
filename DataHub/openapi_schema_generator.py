@@ -105,7 +105,9 @@ def generate_openapi_schema(start_path, server_url):
                             if original_func.__module__ != module.__name__:
                                 continue
 
-                            signature = inspect.signature(original_func)
+                            if func_name.startswith('_'):
+                                continue
+
                             docstring = inspect.getdoc(original_func)
 
                             # Parse docstring dynamically
@@ -137,10 +139,12 @@ def generate_openapi_schema(start_path, server_url):
 
                             # Generate OpenAPI operation ID
                             relative_path = os.path.relpath(root, start_path)
-                            operation_id = f"{relative_path.replace('/', '_')}_{module_name}_{func_name}"
+                            if relative_path == '.':
+                                relative_path = ''
+                            operation_id = f"{relative_path.replace('/', '__')}__{module_name}__{func_name}".strip("_")
+                            api_path = f"/{relative_path}/{module_name}/{func_name}".strip('/')
 
-                            # Add path to OpenAPI schema
-                            openapi_schema["paths"].setdefault(f"/{relative_path}/{module_name}/{func_name}", {
+                            openapi_schema["paths"].setdefault(api_path, {
                                 "get": {
                                     "summary": f"Handler for {module_name}.{func_name}",
                                     "description": description or "",

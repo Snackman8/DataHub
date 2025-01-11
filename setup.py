@@ -24,7 +24,7 @@ setup(name='DataHub',
       author_email='lawy888@gmail.com',
       url='https://github.com/Snackman8/DataHub',
       packages=['DataHub', 'DataHub.example_providers.example'],
-      install_requires=[],
+      install_requires=['fastapi', 'uvicorn', 'pyyaml', 'pretty-html-table'],
       entry_points={
         'console_scripts': ['datahub_server=DataHub.dataHub:console_entry'],
         }
