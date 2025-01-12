@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# clean up
+#   rm /srv/__PROVIDER_NAME__
+#   rm /var/log/__PROVIDER_NAME__
+#   rm /etc/apache2/proxy-configs/proxy__PROVIDER_NAME__.conf
+#   rm /etc/supervisor/conf.d/supervisor__PROVIDER_NAME__.conf
+
 readonly PROVIDER_NAME="example_provider"
 
 # Exit immediately if a command exits with a non-zero status
@@ -28,5 +34,6 @@ cp ${current_dir}/proxy_${PROVIDER_NAME}.conf /etc/apache2/proxy-configs
 systemctl restart apache2
 
 # install the supervisor file
+mkdir -p /var/log/${PROVIDER_NAME}
 cp ${current_dir}/supervisor_${PROVIDER_NAME}.conf /etc/supervisor/conf.d/
 supervisorctl reload
