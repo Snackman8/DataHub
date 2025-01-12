@@ -193,7 +193,7 @@ def console_entry():
     # parse command line arguments
     default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=int, help="host to serve webapp on, i.e. 0.0.0.0 or 127.0.0.1", default='0.0.0.0', required=False)
+    parser.add_argument("--host", help="host to serve webapp on, i.e. 0.0.0.0 or 127.0.0.1", default='0.0.0.0', required=False)
     parser.add_argument("--port", type=int, help="port to serve webapp on", default=9151, required=False)
     parser.add_argument("--loglevel", help="logging level, i.e. INFO", default='INFO', required=False)
     parser.add_argument("--module_path", help="location of additional modules", default=default_provider_path, required=False)
