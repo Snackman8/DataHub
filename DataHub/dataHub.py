@@ -184,15 +184,16 @@ def main(args):
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
     os.environ["OPENAPI_SERVER_URL"] = str(args['openapi_server_url'])
     try:
-        uvicorn.run("DataHub.dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
+        uvicorn.run("DataHub.dataHub:app", host=args['host'], port=args['port'], reload=False, log_level=args['loglevel'].lower())
     except:
-        uvicorn.run("dataHub:app", host="0.0.0.0", port=args['port'], reload=False, log_level=args['loglevel'].lower())
+        uvicorn.run("dataHub:app", host=args['host'], port=args['port'], reload=False, log_level=args['loglevel'].lower())
 
 
 def console_entry():
     # parse command line arguments
     default_provider_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'example_providers')
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=int, help="host to serve webapp on, i.e. 0.0.0.0 or 127.0.0.1", default='0.0.0.0', required=False)
     parser.add_argument("--port", type=int, help="port to serve webapp on", default=9151, required=False)
     parser.add_argument("--loglevel", help="logging level, i.e. INFO", default='INFO', required=False)
     parser.add_argument("--module_path", help="location of additional modules", default=default_provider_path, required=False)
