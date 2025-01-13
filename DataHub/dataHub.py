@@ -109,6 +109,10 @@ def handle_all_requests(full_path: str, request: Request=None):
     access_key = parsed_qs.pop("Access-Key", None)
     secret_key = parsed_qs.pop("Secret-Key", None)
 
+    # apache proxy may prepend the full path with a /, remove it
+    if full_path.startswith('/'):
+        full_path = full_path[1:]
+
     if not app.state.disable_auth:
         if not app.state.allow_url_auth:
             if access_key or secret_key:
@@ -157,8 +161,17 @@ def handle_all_requests(full_path: str, request: Request=None):
                 pass
 
             # Generate and return HTML documentation
+            host = request.headers.get("host", "")
+
+            # special case of apache proxy
+            if 'x-request-uri' in request.headers:
+                if request.headers.get('x-request-uri').endswith(full_path):
+                    host = request.headers.get('x-request-uri')
+                    if full_path != '':
+                        host = request.headers.get('x-request-uri')[:-len(full_path)].strip('/')
+
             html, content_type, return_code = business_logic.build_html_docs(
-                host=request.headers.get("host", ""),
+                host=host,
                 path=full_path,
                 module_path=app.state.module_path
             )

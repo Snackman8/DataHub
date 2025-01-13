@@ -20,7 +20,7 @@ def _build_html_docs_worker(host, path, module_path):
 
     # add style sheet
     html = '<head><link rel="stylesheet" href="/style.css"></head>'
-    html = html + f'<h1><a href="/">DataHub Information</a></h1><pre class=path>Path: /{path}</pre><hr>'
+    html = html + f'<h1><a href="/">DataHub Information</a></h1><pre class=path>Path: /{os.path.join(host, path).partition("/")[2]}</pre><hr>'
 
     # check if we are loading a python file
     if not os.path.exists(os.path.join(module_path, path) + '.py'):
