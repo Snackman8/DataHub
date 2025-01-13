@@ -26,6 +26,6 @@ setup(name='DataHub',
       packages=['DataHub'],
       install_requires=['fastapi', 'uvicorn', 'pyyaml', 'pretty-html-table'],
       entry_points={
-        'console_scripts': ['datahub_server=DataHub.dataHub:console_entry'],
+        'console_scripts': ['datahub_server=DataHub.dataHub:console_entry', 'datahub_api_key_manager=DataHub.dataHub_api_key_manager:console_entry'],
         }
       )

@@ -134,11 +134,6 @@ def handle_all_requests(full_path: str, request: Request=None):
         # Validate API keys
         _validate_api_key(access_key, secret_key)
 
-    # special case for schema
-    if full_path == 'schema':
-        schema = generate_openapi_schema(app.state.module_path, os.environ["OPENAPI_SERVER_URL"])
-        return Response(content=schema, media_type="text/plain", status_code=200)
-
     try:
         if qid == "":
             # Serve static files if possible
@@ -195,7 +190,14 @@ def main(args):
     os.environ["DISABLE_AUTH"] = str(args['disable_auth'])
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
-    os.environ["OPENAPI_SERVER_URL"] = str(args['openapi_server_url'])
+
+    if args['generate_schema']:
+        schema = generate_openapi_schema(args['module_path'], args['openapi_server_url'])
+        print(schema)
+        return
+
+    logging.info(f'\nTo manage API keys, run datahub_api_key_manager --db_path {args["db_path"]}\n')
+
     try:
         uvicorn.run("DataHub.dataHub:app", host=args['host'], port=args['port'], reload=False, log_level=args['loglevel'].lower())
     except:
@@ -212,7 +214,8 @@ def console_entry():
     parser.add_argument("--module_path", help="location of additional modules", default=default_provider_path, required=False)
     parser.add_argument("--disable_auth", help="Disable authentication for testing (default: False)", action="store_true", default='False')
     parser.add_argument("--allow_url_auth", help="Allow authentication by passing in access key and secret key in URL (insecure)", action="store_true", default='False')
-    parser.add_argument("--db_path", help="Path to the SQLite database file (default: my_database.db)", type=str, default="keys.db")
+    parser.add_argument("--db_path", help="Path to the api keys database file (default: keys.db)", type=str, default="keys.db")
+    parser.add_argument("--generate_schema", help="generate the OpenAPI Schema", action="store_true", default='False')
     parser.add_argument("--openapi_server_url", help="OpenAPI Schema server url", type=str, default="http://localhost")
     args = parser.parse_args()
     args = vars(args)
