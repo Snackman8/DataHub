@@ -107,11 +107,18 @@ def _execute_query_worker(path, parsed_qs):
 
     # check if this is already a pickle
     if not isinstance(result, io.BytesIO):
-        f = io.BytesIO()
-        result.to_pickle(f, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
-        f.seek(0)
-        result = f.read()
-        f.close()
+        if isinstance(result, pd.DataFrame):
+            f = io.BytesIO()
+            result.to_pickle(f, compression={'method': 'gzip', 'compresslevel': 1, 'mtime': 1})
+            f.seek(0)
+            result = f.read()
+            f.close()
+        elif isinstance(result, dict):
+            # just return the dict
+            pass
+        else:
+            raise Exception(f'unhandled result type {type(result)}')
+
     else:
         result.seek(0)
         result = result.read()
@@ -156,6 +163,9 @@ def execute_query(path, parsed_qs, nospawn=False):
             result = future.result()
         else:
             result = _execute_query_worker(path, parsed_qs)
+
+        if isinstance(result, dict):
+            return result.get('body', ''), result.get('content-type', 'text/plain'), 200, result.get('headers', {})
 
         f = io.BytesIO(result)
 

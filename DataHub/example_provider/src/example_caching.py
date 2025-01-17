@@ -61,7 +61,6 @@ Example Output:
 Notes:
     - This function generates fake stock prices for demonstration purposes.
     - Prices are random floats between 100 and 500.
-
     """
     logging.info(f"Fetching stock prices for {ticker} from {start_date} to {end_date}.")
 
