@@ -142,7 +142,7 @@ def generate_openapi_schema(start_path, server_url):
                             if relative_path == '.':
                                 relative_path = ''
                             operation_id = f"{relative_path.replace('/', '__')}__{module_name}__{func_name}".strip("_")
-                            api_path = f"/{relative_path}/{module_name}/{func_name}".strip('/')
+                            api_path = "/" + f"/{relative_path}/{module_name}/{func_name}".strip('/')
 
                             openapi_schema["paths"].setdefault(api_path, {
                                 "get": {
