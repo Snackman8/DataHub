@@ -17,6 +17,7 @@ def parse_docstring(docstring):
     example_output = ""
     is_description = True
     current_section = None
+    returns_section = []
 
     for line in docstring.splitlines():
         stripped = line.strip()
@@ -24,10 +25,16 @@ def parse_docstring(docstring):
         if not stripped:  # Skip empty lines
             continue
 
-        if stripped.lower().startswith("params:"):
+        if stripped.lower().startswith("params:") or stripped.lower().startswith("parameters:"):
             parameters_section = []
             is_description = False
-            current_section = "Params"
+            current_section = "Parameters"
+            continue
+
+        if stripped.lower().startswith("returns:"):
+            returns_section = []
+            is_description = False
+            current_section = "Returns"
             continue
 
         if stripped.lower().startswith("example output:"):
@@ -35,16 +42,20 @@ def parse_docstring(docstring):
             continue
 
         # Stop adding to description when we hit any recognized section
-        if ":" in stripped and stripped.endswith(":"):
-            current_section = None
-            continue
+        if current_section != 'Returns':
+            if ":" in stripped and stripped.endswith(":"):
+                current_section = None
+                continue
 
         if is_description:
             # Accumulate as part of the description
             description += f"{stripped} "
-        elif current_section == "Params":
+        elif current_section == "Parameters":
             # Collect lines in the Params section
             parameters_section.append(stripped)
+        elif current_section == "Returns":
+            # Collect lines in the Params section
+            returns_section.append(stripped)
         elif current_section == "Example Output":
             # Collect lines in the Example Output section
             example_output += stripped + "\n"
@@ -53,19 +64,46 @@ def parse_docstring(docstring):
     parameters = {}
     if parameters_section:
         for line in parameters_section:
-            if "-" in line:
+            if ":" in line:
+                param_name, param_desc = line.split(":", 1)
+                param_name = param_name.strip()
+                param_desc = param_desc.strip()
+                if '(' in param_name and ')' in param_name:
+                    param_type = param_name[param_name.find('('):]  # Extract type including parentheses
+                    param_name = param_name[:param_name.find('(')].strip()  # Remove type from param_name
+                    param_desc = param_type + ' ' + param_desc  # Prepend type to param_desc
+                parameters[param_name] = param_desc
+            elif "-" in line:
                 param_name, param_desc = line.split("-", 1)
                 param_name = param_name.strip()
                 param_desc = param_desc.strip()
                 parameters[param_name] = param_desc
 
+    returns_schema = {"type": "object", "properties": {}}
+
+    # Extract the overall description from the first line
+    if ":" in returns_section[0]:
+        returns_schema["description"] = returns_section[0].split(": ", 1)[1]
+
+    for line in returns_section[1:]:  # Process remaining lines
+        if line.startswith('- ') and ': ' in line:
+            key_type_desc = line.strip("- ").split(": ")
+            key_type, desc = key_type_desc[0].strip("'"), key_type_desc[1]
+            key, type_name = key_type.split("'")
+            type_name = type_name.strip().strip('(').strip(')')
+
+            # Map Python types to OpenAPI types
+            type_mapping = {"str": "string", "int": "integer", "bool": "boolean", "float": "number", "list": "array", "dict": "object"}
+            returns_schema["properties"][key] = {
+                "type": type_mapping.get(type_name, "string"),
+                "description": desc
+            }
+
     # Clean and normalize the example output
     if example_output:
         example_output = "\n".join(line.strip() for line in example_output.splitlines())
 
-    return description.strip(), parameters, example_output.strip()
-
-
+    return description.strip(), parameters, returns_schema, example_output.strip()
 
 
 def generate_openapi_schema(start_path, server_url):
@@ -111,7 +149,7 @@ def generate_openapi_schema(start_path, server_url):
                             docstring = inspect.getdoc(original_func)
 
                             # Parse docstring dynamically
-                            description, param_docs, example_output = parse_docstring(docstring or "")
+                            description, param_docs, returns_schema, example_output = parse_docstring(docstring or "")
 
                             # Extract parameters
                             parameters = []
@@ -128,14 +166,6 @@ def generate_openapi_schema(start_path, server_url):
                                     "schema": {"type": python_to_openapi_types.get(param_type, "string")},
                                     "description": param_desc,
                                 })
-
-                            # Add example output to the response schema
-                            response_schema = {
-                                "type": "string",
-                                "format": "binary",
-                            }
-                            if example_output:
-                                response_schema["example"] = example_output
 
                             # Generate OpenAPI operation ID
                             relative_path = os.path.relpath(root, start_path)
@@ -154,8 +184,8 @@ def generate_openapi_schema(start_path, server_url):
                                         "200": {
                                             "description": "Successful Response",
                                             "content": {
-                                                "text/csv": {  # Use 'text/csv' content type for CSV output
-                                                    "schema": response_schema,
+                                                "application/json": {
+                                                    "schema": returns_schema,
                                                 }
                                             }
                                         }
@@ -170,5 +200,3 @@ def generate_openapi_schema(start_path, server_url):
                     print(f"Error processing {file_path}: {e}")
 
     return yaml.dump(openapi_schema, default_flow_style=False)
-
-
