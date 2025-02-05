@@ -10,7 +10,7 @@ import sqlite3
 import sys
 import traceback
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 import uvicorn
 try:
@@ -77,10 +77,14 @@ def _validate_api_key(api_key: str):
 # --------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.module_path = os.getenv("MODULE_PATH", "missing")
+    logging.info(f'cwd = {os.getcwd()}')
+    logging.info(f'module_path = {os.getenv("MODULE_PATH", "missing")}')
+    app.state.module_path = os.path.abspath(os.getenv("MODULE_PATH", "missing"))
+    logging.info(f'absolute module_path = {app.state.module_path}')
     app.state.disable_auth = _str_to_bool(os.getenv("DISABLE_AUTH", 'False'))
     app.state.db_path = os.getenv('DB_PATH', '')
     app.state.allow_url_auth = _str_to_bool(os.getenv("ALLOW_URL_AUTH", 'False'))
+    app.state.static_path = os.getenv("STATIC_PATH", None)
 
     # modify the sys path if needed
     if app.state.module_path != '.':
@@ -128,8 +132,11 @@ def handle_all_requests(full_path: str, request: Request=None):
     try:
         if qid == "":
             # Serve static files if possible
-            if os.path.isfile(full_path):
-                return FileResponse(full_path)
+            if (bool(os.path.splitext(full_path)[1])):
+                if os.path.isfile(os.path.join(app.state.static_path, full_path)):
+                    return FileResponse(os.path.join(app.state.static_path, full_path))
+                else:
+                    return JSONResponse(status_code=404,content={"message": "Does not exist"})
 
             # check if this can be handled as a query
             try:
@@ -177,10 +184,14 @@ def handle_all_requests(full_path: str, request: Request=None):
 #    Main
 # --------------------------------------------------
 def main(args):
-    os.environ["MODULE_PATH"] = args['module_path']
+    os.environ["MODULE_PATH"] = str(args['module_path'])
     os.environ["DISABLE_AUTH"] = str(args['disable_auth'])
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
+    if args['static_path']:
+        os.environ["STATIC_PATH"] = str(args['static_path'])
+    else:
+        os.environ["STATIC_PATH"] = os.path.join(str(args['module_path']), '_static')
 
     if args['generate_schema']:
         schema = generate_openapi_schema(args['module_path'], args['openapi_server_url'])
@@ -208,6 +219,7 @@ def console_entry():
     parser.add_argument("--db_path", help="Path to the api keys database file (default: keys.db)", type=str, default="keys.db")
     parser.add_argument("--generate_schema", help="generate the OpenAPI Schema", action="store_true")
     parser.add_argument("--openapi_server_url", help="OpenAPI Schema server url", type=str, default="http://localhost")
+    parser.add_argument("--static_path", help="path to static files, default is _static directory under the module path", type=str, default=None)
     args = parser.parse_args()
     args = vars(args)
 

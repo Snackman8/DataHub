@@ -6,6 +6,7 @@
 import concurrent.futures
 import importlib
 import inspect
+import logging
 import io
 import os
 import pretty_html_table
@@ -24,30 +25,35 @@ def _build_html_docs_worker(host, path, module_path):
 
     # check if we are loading a python file
     if not os.path.exists(os.path.join(module_path, path) + '.py'):
-        # does not exist, so build a directory listing
-        dir_list = sorted(os.listdir(os.path.join(module_path, path)))
+        # does not exist, so build a directory listing if possible
+        if os.path.exists(os.path.join(module_path, path)):
+            dir_list = sorted(os.listdir(os.path.join(module_path, path)))
 
-        for x in dir_list:
-            if not x.startswith('.') and not x.startswith('_'):
-                try:
-                    if x.endswith('.py'):
-                        x = x[:-3]
-                        m = importlib.import_module(os.path.join(path, x).replace('/', '.'))
-                    else:
-                        m = importlib.import_module(os.path.join(path, x).replace('/', '.'))
-                    html = html + f'<div class=divmodule><h4>/{os.path.join(path, x)}</h4>'
-                    if m.__doc__:
-                        html = html + f'<pre class=doc>{m.__doc__}</pre>'
-                    aref = 'http://' + os.path.join(host, path, x) #+ (('?' + tail[1:]) if tail else '')
-                    html = html + f'<a class=a href={aref}>{aref}</a>'
-                    html = html + f'<hr></div>'
-                except:
-                    pass
+            for x in dir_list:
+                if not x.startswith('.') and not x.startswith('_'):
+                    try:
+                        if x.endswith('.py'):
+                            x = x[:-3]
+                        mp = os.path.join(path, x).replace('/', '.')
+                        logging.info(f'attmepting to import {mp}')
+                        m = importlib.import_module(mp)
+                        html = html + f'<div class=divmodule><h4>/{os.path.join(path, x)}</h4>'
+                        if m.__doc__:
+                            html = html + f'<pre class=doc>{m.__doc__}</pre>'
+                        aref = 'http://' + os.path.join(host, path, x) #+ (('?' + tail[1:]) if tail else '')
+                        html = html + f'<a class=a href={aref}>{aref}</a>'
+                        html = html + f'<hr></div>'
+                    except:
+                        pass
 
-        return html, 'text/html', 200
+            return html, 'text/html', 200
 
     # try to load the functions in the module
-    m = importlib.import_module(path.replace('/', '.'))
+    try:
+        m = importlib.import_module(path.replace('/', '.'))
+    except ModuleNotFoundError:
+        return 'Does not exist', 'text/plain', 404
+
     funcs = []
     for name in dir(m):
         if not name.startswith('_'):
@@ -165,7 +171,8 @@ def execute_query(path, parsed_qs, nospawn=False):
             result = _execute_query_worker(path, parsed_qs)
 
         if isinstance(result, dict):
-            return result.get('body', ''), result.get('content-type', 'text/plain'), 200, result.get('headers', {})
+            return result.get('body', ''), 'text/plain', 200, result.get('headers', {})
+#            return result.get('body', ''), result.get('content-type', 'text/plain'), 200, result.get('headers', {})
 
         f = io.BytesIO(result)
 
