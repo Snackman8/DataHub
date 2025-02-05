@@ -152,20 +152,27 @@ def generate_openapi_schema(start_path, server_url):
                             description, param_docs, returns_schema, example_output = parse_docstring(docstring or "")
 
                             # Extract parameters
-                            parameters = []
+                            post_param_schema = {'type': 'object', 'properties': {}}
+#                            parameters = []
+                            type_mapping = {"str": "string", "int": "integer", "bool": "boolean", "float": "number", "list": "array", "dict": "object"}
                             for name, param_desc in param_docs.items():
                                 param_type = "string"  # Default type
                                 if "(" in param_desc and ")" in param_desc:
                                     param_type = param_desc.split("(")[1].split(")")[0]
                                     param_desc = param_desc.split(")")[1].strip()
 
-                                parameters.append({
-                                    "name": name,
-                                    "in": "query",
-                                    "required": True,  # Assume required by default
-                                    "schema": {"type": python_to_openapi_types.get(param_type, "string")},
+                                post_param_schema['properties'][name] = {
+                                    "type": type_mapping.get(param_type, param_type),
                                     "description": param_desc,
-                                })
+                                    }
+
+                                # parameters.append({
+                                #     "name": name,
+                                #     "in": "query",
+                                #     "required": True,  # Assume required by default
+                                #     "schema": {"type": python_to_openapi_types.get(param_type, "string")},
+                                #     "description": param_desc,
+                                # })
 
                             # Generate OpenAPI operation ID
                             relative_path = os.path.relpath(root, start_path)
@@ -175,11 +182,34 @@ def generate_openapi_schema(start_path, server_url):
                             api_path = "/" + f"/{relative_path}/{module_name}/{func_name}".strip('/')
 
                             openapi_schema["paths"].setdefault(api_path, {
-                                "get": {
-                                    "summary": f"Handler for {module_name}.{func_name}",
+                                # "get": {
+                                #     "summary": f"Handler for {module_name}.{func_name}",
+                                #     "description": description or "",
+                                #     "operationId": operation_id,
+                                #     "parameters": parameters,
+                                #     "responses": {
+                                #         "200": {
+                                #             "description": "Successful Response",
+                                #             "content": {
+                                #                 "application/json": {
+                                #                     "schema": returns_schema,
+                                #                 }
+                                #             }
+                                #         }
+                                #     },
+                                # }
+                                "post": {
+#                                    "summary": f"Handler for {module_name}.{func_name}",
                                     "description": description or "",
                                     "operationId": operation_id,
-                                    "parameters": parameters,
+ #                                   "parameters": parameters,
+                                    "requestBody": {
+                                        "content": {
+                                            "application/json": {
+                                                "schema": post_param_schema,
+                                            }
+                                        }
+                                    },
                                     "responses": {
                                         "200": {
                                             "description": "Successful Response",

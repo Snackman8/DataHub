@@ -96,8 +96,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-@app.get("/{full_path:path}")
-def handle_all_requests(full_path: str, request: Request=None):
+@app.api_route("/{full_path:path}", methods=["GET", "POST"])
+async def handle_all_requests(full_path: str, request: Request=None):
     """
     Handles all incoming requests dynamically:
     - Validates API keys passed as query parameters.
@@ -106,6 +106,15 @@ def handle_all_requests(full_path: str, request: Request=None):
     """
     # Parse query parameters
     parsed_qs = dict(request.query_params)
+
+    # If POST, merge with JSON body
+    if request.method == "POST":
+        try:
+            body = await request.json()
+            parsed_qs.update(body)  # Merge JSON body into params
+        except Exception:
+            pass  # Ignore if no JSON body is present
+
     qid = parsed_qs.get("qid", "")
     nospawn = parsed_qs.pop("nospawn", [""])[0]
     api_key = parsed_qs.pop("api-key", None)
