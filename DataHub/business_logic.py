@@ -171,8 +171,7 @@ def execute_query(path, parsed_qs, nospawn=False):
             result = _execute_query_worker(path, parsed_qs)
 
         if isinstance(result, dict):
-            return result.get('body', ''), 'text/plain', 200, result.get('headers', {})
-#            return result.get('body', ''), result.get('content-type', 'text/plain'), 200, result.get('headers', {})
+            return result.get('body', ''), result.get('content-type', 'text/plain'), 200, result.get('headers', {})
 
         f = io.BytesIO(result)
 
