@@ -82,6 +82,7 @@ async def lifespan(app: FastAPI):
     app.state.module_path = os.path.abspath(os.getenv("MODULE_PATH", "missing"))
     logging.info(f'absolute module_path = {app.state.module_path}')
     app.state.disable_auth = _str_to_bool(os.getenv("DISABLE_AUTH", 'False'))
+    app.state.disable_auth_on_static_files = _str_to_bool(os.getenv("DISABLE_AUTH_ON_STATIC_FILES", 'False'))
     app.state.db_path = os.getenv('DB_PATH', '')
     app.state.allow_url_auth = _str_to_bool(os.getenv("ALLOW_URL_AUTH", 'False'))
     app.state.static_path = os.getenv("STATIC_PATH", None)
@@ -123,7 +124,14 @@ async def handle_all_requests(full_path: str, request: Request=None):
     if full_path.startswith('/'):
         full_path = full_path[1:]
 
-    if not app.state.disable_auth:
+    # don't do authentication on static path files
+    authenticate = True
+    if app.state.disable_auth:
+        authenticate = False
+    if app.state.disable_auth_on_static_files:
+        if os.path.isfile(os.path.join(app.state.static_path, full_path)):
+            authenticate = False
+    if authenticate:
         if not app.state.allow_url_auth:
             if api_key:
                 raise HTTPException(status_code=400, detail='API-Key is not allowed to be passed in through the URL unless --allow_url_auth is set')
@@ -154,7 +162,7 @@ async def handle_all_requests(full_path: str, request: Request=None):
                     tmp_full_path, qid = full_path.rsplit('/', 1)
                     tmp_parsed_qs = dict(parsed_qs)
                     tmp_parsed_qs['qid'] = qid
-                    html, content_type, return_code, headers = business_logic.execute_query(
+                    html, content_type, return_code, headers = await business_logic.execute_query(
                         tmp_full_path, tmp_parsed_qs, nospawn not in ["", "0"]
                     )
                     return Response(content=html, media_type=content_type, status_code=return_code, headers=headers)
@@ -195,6 +203,7 @@ async def handle_all_requests(full_path: str, request: Request=None):
 def main(args):
     os.environ["MODULE_PATH"] = str(args['module_path'])
     os.environ["DISABLE_AUTH"] = str(args['disable_auth'])
+    os.environ["DISABLE_AUTH_ON_STATIC_FILES"] = str(args['disable_auth_on_static_files'])
     os.environ["DB_PATH"] = str(args['db_path'])
     os.environ["ALLOW_URL_AUTH"] = str(args['allow_url_auth'])
     if args['static_path']:
@@ -224,6 +233,7 @@ def console_entry():
     parser.add_argument("--loglevel", help="logging level, i.e. INFO", default='INFO', required=False)
     parser.add_argument("--module_path", help="location of additional modules", default=default_provider_path, required=False)
     parser.add_argument("--disable_auth", help="Disable authentication for testing (default: False)", action="store_true")
+    parser.add_argument("--disable_auth_on_static_files", help="Disable authentication only on static files (default: False)", action="store_true")
     parser.add_argument("--allow_url_auth", help="Allow authentication by passing in access key and secret key in URL (insecure)", action="store_true")
     parser.add_argument("--db_path", help="Path to the api keys database file (default: keys.db)", type=str, default="keys.db")
     parser.add_argument("--generate_schema", help="generate the OpenAPI Schema", action="store_true")

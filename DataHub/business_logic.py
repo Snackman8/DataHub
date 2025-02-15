@@ -3,6 +3,7 @@
 # --------------------------------------------------
 #    Imports
 # --------------------------------------------------
+import asyncio
 import concurrent.futures
 import importlib
 import inspect
@@ -136,7 +137,7 @@ def _execute_fast_cache_worker(path, parsed_qs):
     return ''
 
 
-def execute_query(path, parsed_qs, nospawn=False):
+async def execute_query(path, parsed_qs, nospawn=False):
     """ execute a data query and return the results
 
         Args:
@@ -166,7 +167,7 @@ def execute_query(path, parsed_qs, nospawn=False):
         # handle all other formats
         if not nospawn:
             future = executor.submit(_execute_query_worker, path, parsed_qs)
-            result = future.result()
+            result = await asyncio.to_thread(future.result)
         else:
             result = _execute_query_worker(path, parsed_qs)
 
